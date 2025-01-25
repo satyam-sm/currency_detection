@@ -32,6 +32,9 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
   // Text-to-Speech
   final FlutterTts _flutterTts = FlutterTts();
 
+  // Variable to hold the preview image bytes after rotation
+  Uint8List? _rotatedImageBytes;
+
   @override
   void initState() {
     super.initState();
@@ -39,7 +42,7 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
     // Initialize camera
     _controller = CameraController(
       widget.cameras[0],
-      ResolutionPreset.medium,
+      ResolutionPreset.high,
     );
     _initializeControllerFuture = _controller?.initialize();
 
@@ -49,7 +52,7 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
     _configureTextToSpeech();
   }
 
-//loading model -----
+  // loading model -----
   Future<void> _loadModel() async {
     try {
       _interpreter = await Interpreter.fromAsset('assets/model.tflite');
@@ -58,7 +61,7 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
     }
   }
 
-// tts work -----
+  // tts work -----
   Future<void> _configureTextToSpeech() async {
     await _flutterTts.setLanguage('en-US');
     await _flutterTts.setPitch(1.0);
@@ -69,10 +72,10 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
     await _flutterTts.speak('Detected $denomination Rupees');
   }
 
-// applying model
+  // applying model
   Future<void> _captureAndClassify() async {
     try {
-      //camera part --------
+      // camera part --------
       await _initializeControllerFuture;
 
       final image = await _controller!.takePicture();
@@ -102,14 +105,20 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
     }
   }
 
-// preprocessing start -----
+  // preprocessing start -----
   Float32List _preprocessImage(img.Image image) {
     final int targetHeight = 128;
     final int targetWidth = 128;
 
-    //resize
+    // Rotate the image anti-clockwise by 90 degrees
+    final rotatedImage = img.copyRotate(image, angle: -90);
+
+    // Store the rotated image bytes for preview
+    _rotatedImageBytes = Uint8List.fromList(img.encodeJpg(rotatedImage));
+
+    // Resize image to match the 2:1 aspect ratio (currency note shape)
     final resizedImage =
-        img.copyResize(image, width: targetWidth, height: targetHeight);
+    img.copyResize(rotatedImage, width: targetWidth, height: targetHeight);
 
     // Normalize
     final Float32List input = Float32List(targetHeight * targetWidth * 3);
@@ -156,7 +165,7 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
     };
   }
 
-// preprocessing end
+  // preprocessing end
 
   void _showErrorDialog(String message) {
     showDialog(
@@ -174,7 +183,7 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
     );
   }
 
-// frontend work-----
+  // frontend work -----
   Widget _buildCameraPreview() {
     if (_controller == null || !_controller!.value.isInitialized) {
       return Center(child: CircularProgressIndicator());
@@ -186,27 +195,21 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
     final double previewHeight = mediaSize.height * 0.6;
     final double previewWidth = mediaSize.width;
 
-    // Calculate scale to crop the camera feed while maintaining aspect ratio
-    final double cameraAspectRatio = _controller!.value.aspectRatio;
-    final double screenAspectRatio = previewWidth / previewHeight;
-    final double scale = cameraAspectRatio > screenAspectRatio
-        ? cameraAspectRatio / screenAspectRatio
-        : screenAspectRatio / cameraAspectRatio;
+    // Aspect ratio 2:1 for currency note
+    final double cameraAspectRatio = 2.0;
+    final double scale = cameraAspectRatio;
 
     return Center(
       child: ClipRect(
         child: Container(
-          width: previewWidth, // Match screen width
-          height: previewHeight, // Set to 70% of screen height
-          child: Transform.scale(
-            scale: scale * 1.2, // Uniformly scale the camera feed
-            child: RotatedBox(
-              quarterTurns: 1,
-              child: Center(
-                child: AspectRatio(
-                  aspectRatio: cameraAspectRatio, // Match camera's aspect ratio
-                  child: CameraPreview(_controller!),
-                ),
+          width: previewWidth,
+          height: previewHeight,
+          child: RotatedBox(
+            quarterTurns: 1,
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: cameraAspectRatio,
+                child: CameraPreview(_controller!),
               ),
             ),
           ),
@@ -221,71 +224,80 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text('Currency Classifier')),
-      body: Column(
-        mainAxisAlignment: MainAxisAlignment.start,
-        children: [
-          // Camera Preview design
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white, // Background color
-              border: Border.all(
-                color: const Color.fromARGB(255, 5, 77, 111), // Border color
-                width: 3.0, // Border width
+      body: SingleChildScrollView(  // Make the entire body scrollable
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            // Camera Preview design
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white, // Background color
+                border: Border.all(
+                  color: const Color.fromARGB(255, 5, 77, 111), // Border color
+                  width: 3.0, // Border width
+                ),
+                borderRadius: BorderRadius.circular(20), // Rounded corners
               ),
-              borderRadius: BorderRadius.circular(20), // Rounded corners
-            ),
-            margin: EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(
-                  17), // Slightly smaller than outer radius
-              child: FutureBuilder<void>(
-                future: _initializeControllerFuture,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.done) {
-                    return Expanded(
-                      child: _buildCameraPreview(),
-                    );
-                  } else {
-                    return Center(child: CircularProgressIndicator());
-                  }
-                },
+              margin: EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(17), // Slightly smaller than outer radius
+                child: FutureBuilder<void>(
+                  future: _initializeControllerFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.done) {
+                      return Expanded(
+                        child: _buildCameraPreview(),
+                      );
+                    } else {
+                      return Center(child: CircularProgressIndicator());
+                    }
+                  },
+                ),
               ),
             ),
-          ),
 
-//button design
-          Padding(
-              padding: const EdgeInsets.all(10.0),
-              child: ElevatedButton(
-                onPressed: _captureAndClassify,
-                style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 10, horizontal: 40),
-                    foregroundColor: const Color.fromARGB(255, 255, 255, 255),
-                    backgroundColor: const Color.fromARGB(255, 109, 51, 0),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    )),
-                child: Text('Detect Currency'),
-              )),
+            // Button design
+            Padding(
+                padding: const EdgeInsets.all(10.0),
+                child: ElevatedButton(
+                  onPressed: _captureAndClassify,
+                  style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 10, horizontal: 40),
+                      foregroundColor: const Color.fromARGB(255, 255, 255, 255),
+                      backgroundColor: const Color.fromARGB(255, 109, 51, 0),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      )),
+                  child: Text('Detect Currency'),
+                )),
 
-          // Results Display
-          if (_currentResult.isNotEmpty) ...[
-            Text(
-              'Denomination: ${_currentResult['label']} Rupees\n',
-              style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(
-              height: 5,
-            ),
-            Text(
-              'Confidence: ${_currentResult['confidence']}%',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-            ),
-          ]
-        ],
+            // // Display rotated image preview
+            // if (_rotatedImageBytes != null) ...[
+            //   Padding(
+            //     padding: const EdgeInsets.all(10.0),
+            //     child: Image.memory(_rotatedImageBytes!),
+            //   ),
+            // ],
+
+            // Results Display
+            if (_currentResult.isNotEmpty) ...[
+              Text(
+                'Denomination: ${_currentResult['label']} Rupees\n',
+                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(
+                height: 5,
+              ),
+              // Text(
+              //   'Confidence: ${_currentResult['confidence']}%',
+              //   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              //   textAlign: TextAlign.center,
+              // ),
+            ]
+          ],
+        ),
       ),
     );
   }
