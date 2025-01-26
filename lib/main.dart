@@ -23,8 +23,14 @@ class MyApp extends StatelessWidget {
       title: 'Currency Classifier',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primarySwatch: Colors.blue,
-        visualDensity: VisualDensity.adaptivePlatformDensity,
+        appBarTheme: AppBarTheme(
+          toolbarHeight: 38,
+          titleTextStyle: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: const Color.fromARGB(255, 97, 41, 4),
+          ),
+        ),
       ),
       home: CurrencyClassifierPage(cameras: cameras),
     );
