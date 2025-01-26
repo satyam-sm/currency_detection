@@ -43,3 +43,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Exclude keystore and credential files
+android/app/key.properties
+android/app/keystore.jks
