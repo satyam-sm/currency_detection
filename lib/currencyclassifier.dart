@@ -32,8 +32,11 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
   // Text-to-Speech
   final FlutterTts _flutterTts = FlutterTts();
 
-  // Variable to hold the preview image bytes after rotation
-  Uint8List? _rotatedImageBytes;
+  // Flag to track if classification is in progress
+  bool _isClassifying = false;
+
+  // Variable to store the current classification result
+  Map<String, dynamic> _currentResult = {};
 
   @override
   void initState() {
@@ -52,7 +55,7 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
     _configureTextToSpeech();
   }
 
-  // loading model -----
+  // Load the TensorFlow Lite model
   Future<void> _loadModel() async {
     try {
       _interpreter = await Interpreter.fromAsset('assets/model.tflite');
@@ -61,51 +64,135 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
     }
   }
 
-  // tts work -----
+  // Configure Text-to-Speech settings
   Future<void> _configureTextToSpeech() async {
     await _flutterTts.setLanguage('en-US');
     await _flutterTts.setPitch(1.0);
     await _flutterTts.setSpeechRate(0.5);
   }
 
+  // Speak the detected denomination
   Future<void> _speakDenomination(String denomination) async {
     await _flutterTts.speak('Detected $denomination Rupees');
   }
 
-  // applying model
+  // Capture and classify 3 snapshots with different zoom levels
   Future<void> _captureAndClassify() async {
+    setState(() {
+      _isClassifying = true;
+    });
+
     try {
-      // camera part --------
-      await _initializeControllerFuture;
+      // List to store the results of each classification
+      List<String> results = [];
 
-      final image = await _controller!.takePicture();
+      for (int i = 0; i < 3; i++) {
+        // Ensure the camera is initialized
+        await _initializeControllerFuture;
 
-      // Read image bytes
-      final imageBytes = await image.readAsBytes();
-      final decodedImage = img.decodeImage(imageBytes);
+        // Capture an image
+        final image = await _controller!.takePicture();
 
-      if (decodedImage == null) {
-        _showErrorDialog('Failed to decode image');
-        return;
+        // Read image bytes
+        final imageBytes = await image.readAsBytes();
+        final decodedImage = img.decodeImage(imageBytes);
+
+        if (decodedImage == null) {
+          _showErrorDialog('Failed to decode image');
+          return;
+        }
+
+        // Preprocess image based on the iteration
+        img.Image processedImage;
+        if (i == 0) {
+          // First image: no zoom
+          processedImage = decodedImage;
+        } else if (i == 1) {
+          // Second image: zoom in on the top half with 2x zoom
+          processedImage = _zoomImage(decodedImage, 0, 0, decodedImage.width, decodedImage.height ~/ 2, zoom: 2.0);
+        } else {
+          // Third image: zoom in on the bottom half with 2x zoom
+          processedImage = _zoomImage(decodedImage, 0, decodedImage.height ~/ 2, decodedImage.width, decodedImage.height ~/ 2, zoom: 2.0);
+        }
+
+        // Preprocess the processed image for classification
+        final Float32List input = _preprocessImage(processedImage);
+
+        // Perform classification
+        final result = _classifyImage(input);
+
+        // Store the result
+        results.add(result['label']);
       }
 
-      // Preprocess image
-      final processedImage = _preprocessImage(decodedImage);
+      // Determine the majority result
+      final majorityResult = _getMajorityResult(results);
 
-      // Perform classification
-      final result = _classifyImage(processedImage);
-
-      // update UI -----
+      // Update UI with the majority result
       setState(() {
-        _currentResult = result;
+        _currentResult = {'label': majorityResult, 'confidence': 'N/A'};
+        _isClassifying = false;
       });
-      await _speakDenomination(result['label']);
+
+      // Speak the majority result
+      await _speakDenomination(majorityResult);
     } catch (e) {
       _showErrorDialog('Classification error: $e');
+      setState(() {
+        _isClassifying = false;
+      });
     }
   }
 
-  // preprocessing start -----
+  // Helper method to zoom in on a specific region of the image
+  img.Image _zoomImage(img.Image image, int x, int y, int width, int height, {double zoom = 1.0}) {
+    // Calculate the zoomed region
+    final zoomedWidth = (width / zoom).round();
+    final zoomedHeight = (height / zoom).round();
+
+    // Calculate the center of the region
+    final centerX = x + width ~/ 2;
+    final centerY = y + height ~/ 2;
+
+    // Calculate the new crop coordinates
+    final newX = (centerX - zoomedWidth ~/ 2).clamp(0, image.width - zoomedWidth);
+    final newY = (centerY - zoomedHeight ~/ 2).clamp(0, image.height - zoomedHeight);
+
+    // Crop the image
+    final croppedImage = img.copyCrop(image, x: newX, y: newY, width: zoomedWidth, height: zoomedHeight);
+
+    // Resize the cropped image back to the original dimensions
+    return img.copyResize(croppedImage, width: width, height: height);
+  }
+
+  // Helper method to determine the majority result
+  String _getMajorityResult(List<String> results) {
+    // Create a map to count the occurrences of each result
+    Map<String, int> resultCounts = {};
+
+    for (var result in results) {
+      if (resultCounts.containsKey(result)) {
+        resultCounts[result] = resultCounts[result]! + 1;
+      } else {
+        resultCounts[result] = 1;
+      }
+    }
+
+    // Find the result with the highest count
+    String majorityResult = '';
+    int maxCount = 0;
+
+    resultCounts.forEach((result, count) {
+      if (count > maxCount) {
+        majorityResult = result;
+        maxCount = count;
+      }
+    });
+
+    return majorityResult;
+  }
+
+  // Preprocess the image for classification
   Float32List _preprocessImage(img.Image image) {
     final int targetHeight = 128;
     final int targetWidth = 128;
@@ -113,14 +200,11 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
     // Rotate the image anti-clockwise by 90 degrees
     final rotatedImage = img.copyRotate(image, angle: -90);
 
-    // Store the rotated image bytes for preview
-    _rotatedImageBytes = Uint8List.fromList(img.encodeJpg(rotatedImage));
-
     // Resize image to match the 2:1 aspect ratio (currency note shape)
     final resizedImage =
     img.copyResize(rotatedImage, width: targetWidth, height: targetHeight);
 
-    // Normalize
+    // Normalize pixel values
     final Float32List input = Float32List(targetHeight * targetWidth * 3);
 
     for (int y = 0; y < targetHeight; y++) {
@@ -137,6 +221,7 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
     return input;
   }
 
+  // Classify the preprocessed image using the TensorFlow Lite model
   Map<String, dynamic> _classifyImage(Float32List processedImage) {
     if (_interpreter == null) {
       throw Exception('Model not loaded');
@@ -165,8 +250,7 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
     };
   }
 
-  // preprocessing end
-
+  // Show an error dialog
   void _showErrorDialog(String message) {
     showDialog(
       context: context,
@@ -183,7 +267,7 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
     );
   }
 
-  // frontend work -----
+  // Build the camera preview widget
   Widget _buildCameraPreview() {
     if (_controller == null || !_controller!.value.isInitialized) {
       return Center(child: CircularProgressIndicator());
@@ -197,7 +281,6 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
 
     // Aspect ratio 2:1 for currency note
     final double cameraAspectRatio = 2.0;
-    final double scale = cameraAspectRatio;
 
     return Center(
       child: ClipRect(
@@ -218,29 +301,27 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
     );
   }
 
-  Map<String, dynamic> _currentResult = {};
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text('Currency Classifier')),
-      body: SingleChildScrollView(  // Make the entire body scrollable
+      body: SingleChildScrollView(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
             // Camera Preview design
             Container(
               decoration: BoxDecoration(
-                color: Colors.white, // Background color
+                color: Colors.white,
                 border: Border.all(
-                  color: const Color.fromARGB(255, 5, 77, 111), // Border color
-                  width: 3.0, // Border width
+                  color: const Color.fromARGB(255, 5, 77, 111),
+                  width: 3.0,
                 ),
-                borderRadius: BorderRadius.circular(20), // Rounded corners
+                borderRadius: BorderRadius.circular(20),
               ),
               margin: EdgeInsets.symmetric(horizontal: 10, vertical: 0),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(17), // Slightly smaller than outer radius
+                borderRadius: BorderRadius.circular(17),
                 child: FutureBuilder<void>(
                   future: _initializeControllerFuture,
                   builder: (context, snapshot) {
@@ -258,27 +339,22 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
 
             // Button design
             Padding(
-                padding: const EdgeInsets.all(10.0),
-                child: ElevatedButton(
-                  onPressed: _captureAndClassify,
-                  style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 10, horizontal: 40),
-                      foregroundColor: const Color.fromARGB(255, 255, 255, 255),
-                      backgroundColor: const Color.fromARGB(255, 109, 51, 0),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      )),
-                  child: Text('Detect Currency'),
-                )),
-
-            // // Display rotated image preview
-            // if (_rotatedImageBytes != null) ...[
-            //   Padding(
-            //     padding: const EdgeInsets.all(10.0),
-            //     child: Image.memory(_rotatedImageBytes!),
-            //   ),
-            // ],
+              padding: const EdgeInsets.all(10.0),
+              child: ElevatedButton(
+                onPressed: _isClassifying ? null : _captureAndClassify,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 40),
+                  foregroundColor: const Color.fromARGB(255, 255, 255, 255),
+                  backgroundColor: const Color.fromARGB(255, 109, 51, 0),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                ),
+                child: _isClassifying
+                    ? CircularProgressIndicator(color: Colors.white)
+                    : Text('Detect Currency'),
+              ),
+            ),
 
             // Results Display
             if (_currentResult.isNotEmpty) ...[
@@ -287,14 +363,7 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
                 style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
               ),
-              SizedBox(
-                height: 5,
-              ),
-              // Text(
-              //   'Confidence: ${_currentResult['confidence']}%',
-              //   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              //   textAlign: TextAlign.center,
-              // ),
+              SizedBox(height: 5),
             ]
           ],
         ),
