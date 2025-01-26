@@ -281,7 +281,7 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
     final mediaSize = MediaQuery.of(context).size;
     // Define height for 60% of the screen
     final double previewWidth = mediaSize.width;
-    final double previewHeight = mediaSize.height * (0.00204 * previewWidth);
+    final double previewHeight = mediaSize.height * 0.84;
 
     if (_controller == null || !_controller!.value.isInitialized) {
       return SizedBox(
