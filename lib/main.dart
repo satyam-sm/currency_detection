@@ -1,9 +1,5 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
-import 'package:image/image.dart' as img;
-import 'package:tflite_flutter/tflite_flutter.dart';
-import 'package:flutter_tts/flutter_tts.dart';
 import 'currencyclassifier.dart';
 
 void main() async {
@@ -15,16 +11,22 @@ void main() async {
 class MyApp extends StatelessWidget {
   final List<CameraDescription> cameras;
 
-  const MyApp({Key? key, required this.cameras}) : super(key: key);
+  const MyApp({super.key, required this.cameras});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Currency Classifier',
+      title: 'CashScan',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primarySwatch: Colors.blue,
-        visualDensity: VisualDensity.adaptivePlatformDensity,
+        appBarTheme: AppBarTheme(
+          toolbarHeight: 25,
+          titleTextStyle: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: const Color.fromARGB(255, 4, 41, 79),
+          ),
+        ),
       ),
       home: CurrencyClassifierPage(cameras: cameras),
     );
