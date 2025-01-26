@@ -46,6 +46,7 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
     _controller = CameraController(
       widget.cameras[0],
       ResolutionPreset.high,
+      enableAudio: false,
     );
     _initializeControllerFuture = _controller?.initialize();
 
@@ -109,10 +110,14 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
           processedImage = decodedImage;
         } else if (i == 1) {
           // Second image: zoom in on the top half with 2x zoom
-          processedImage = _zoomImage(decodedImage, 0, 0, decodedImage.width, decodedImage.height ~/ 2, zoom: 2.0);
+          processedImage = _zoomImage(
+              decodedImage, 0, 0, decodedImage.width, decodedImage.height ~/ 2,
+              zoom: 2.0);
         } else {
           // Third image: zoom in on the bottom half with 2x zoom
-          processedImage = _zoomImage(decodedImage, 0, decodedImage.height ~/ 2, decodedImage.width, decodedImage.height ~/ 2, zoom: 2.0);
+          processedImage = _zoomImage(decodedImage, 0, decodedImage.height ~/ 2,
+              decodedImage.width, decodedImage.height ~/ 2,
+              zoom: 2.0);
         }
 
         // Preprocess the processed image for classification
@@ -145,7 +150,8 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
   }
 
   // Helper method to zoom in on a specific region of the image
-  img.Image _zoomImage(img.Image image, int x, int y, int width, int height, {double zoom = 1.0}) {
+  img.Image _zoomImage(img.Image image, int x, int y, int width, int height,
+      {double zoom = 1.0}) {
     // Calculate the zoomed region
     final zoomedWidth = (width / zoom).round();
     final zoomedHeight = (height / zoom).round();
@@ -155,11 +161,14 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
     final centerY = y + height ~/ 2;
 
     // Calculate the new crop coordinates
-    final newX = (centerX - zoomedWidth ~/ 2).clamp(0, image.width - zoomedWidth);
-    final newY = (centerY - zoomedHeight ~/ 2).clamp(0, image.height - zoomedHeight);
+    final newX =
+        (centerX - zoomedWidth ~/ 2).clamp(0, image.width - zoomedWidth);
+    final newY =
+        (centerY - zoomedHeight ~/ 2).clamp(0, image.height - zoomedHeight);
 
     // Crop the image
-    final croppedImage = img.copyCrop(image, x: newX, y: newY, width: zoomedWidth, height: zoomedHeight);
+    final croppedImage = img.copyCrop(image,
+        x: newX, y: newY, width: zoomedWidth, height: zoomedHeight);
 
     // Resize the cropped image back to the original dimensions
     return img.copyResize(croppedImage, width: width, height: height);
@@ -202,7 +211,7 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
 
     // Resize image to match the 2:1 aspect ratio (currency note shape)
     final resizedImage =
-    img.copyResize(rotatedImage, width: targetWidth, height: targetHeight);
+        img.copyResize(rotatedImage, width: targetWidth, height: targetHeight);
 
     // Normalize pixel values
     final Float32List input = Float32List(targetHeight * targetWidth * 3);
@@ -269,22 +278,24 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
 
   // Build the camera preview widget
   Widget _buildCameraPreview() {
+    final mediaSize = MediaQuery.of(context).size;
+    // Define height for 60% of the screen
+    final double previewWidth = mediaSize.width;
+    final double previewHeight = mediaSize.height * (0.00204 * previewWidth);
+
     if (_controller == null || !_controller!.value.isInitialized) {
-      return Center(child: CircularProgressIndicator());
+      return SizedBox(
+          width: previewWidth,
+          height: previewHeight,
+          child: Center(child: CircularProgressIndicator()));
     }
 
-    final mediaSize = MediaQuery.of(context).size;
-
-    // Define height for 60% of the screen
-    final double previewHeight = mediaSize.height * 0.6;
-    final double previewWidth = mediaSize.width;
-
     // Aspect ratio 2:1 for currency note
-    final double cameraAspectRatio = 2.0;
+    final double cameraAspectRatio = 1.94;
 
     return Center(
       child: ClipRect(
-        child: Container(
+        child: SizedBox(
           width: previewWidth,
           height: previewHeight,
           child: RotatedBox(
@@ -304,67 +315,84 @@ class _CurrencyClassifierPageState extends State<CurrencyClassifierPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Currency Classifier')),
+      appBar: AppBar(title: Text('CashScan')),
       body: SingleChildScrollView(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
-            // Camera Preview design
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(
-                  color: const Color.fromARGB(255, 5, 77, 111),
-                  width: 3.0,
-                ),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              margin: EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(17),
-                child: FutureBuilder<void>(
-                  future: _initializeControllerFuture,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.done) {
-                      return Expanded(
-                        child: _buildCameraPreview(),
-                      );
-                    } else {
-                      return Center(child: CircularProgressIndicator());
-                    }
-                  },
-                ),
-              ),
-            ),
-
-            // Button design
-            Padding(
-              padding: const EdgeInsets.all(10.0),
-              child: ElevatedButton(
-                onPressed: _isClassifying ? null : _captureAndClassify,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 40),
-                  foregroundColor: const Color.fromARGB(255, 255, 255, 255),
-                  backgroundColor: const Color.fromARGB(255, 109, 51, 0),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(15),
+            // Camera Preview with floating button
+            Stack(
+              children: [
+                // Camera Preview Container
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border.all(
+                      color: const Color.fromARGB(255, 5, 77, 111),
+                      width: 3.0,
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  margin: EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(17),
+                    child: FutureBuilder<void>(
+                      future: _initializeControllerFuture,
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.done) {
+                          return _buildCameraPreview();
+                        } else {
+                          return Center(child: CircularProgressIndicator());
+                        }
+                      },
+                    ),
                   ),
                 ),
-                child: _isClassifying
-                    ? CircularProgressIndicator(color: Colors.white)
-                    : Text('Detect Currency'),
-              ),
+
+                // Floating Button
+                Positioned(
+                  bottom: 25, // Distance from bottom of the camera preview
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: ElevatedButton(
+                      onPressed: _isClassifying ? null : _captureAndClassify,
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                          horizontal: 30,
+                        ),
+                        // foregroundColor:
+                        //     const Color.fromARGB(255, 255, 255, 255),
+                        backgroundColor: const Color.fromARGB(169, 0, 0, 0),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                      child: _isClassifying
+                          ? CircularProgressIndicator(color: Colors.white)
+                          : Text(
+                              'Detect Currency',
+                              style:
+                                  TextStyle(fontSize: 20, color: Colors.white),
+                            ),
+                    ),
+                  ),
+                ),
+              ],
             ),
 
             // Results Display
             if (_currentResult.isNotEmpty) ...[
-              Text(
-                'Denomination: ${_currentResult['label']} Rupees\n',
-                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
+              Padding(
+                padding: const EdgeInsets.all(0),
+                child: Text(
+                  'Denomination: ${_currentResult['label']} Rupees\n',
+                  style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
               ),
-              SizedBox(height: 5),
-            ]
+            ],
           ],
         ),
       ),

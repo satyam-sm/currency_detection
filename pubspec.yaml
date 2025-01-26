@@ -1,5 +1,5 @@
-name: tinyml
-description: "A new Flutter project."
+name: CashScan
+description: "Scan and Detect Currency Notes"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
@@ -16,7 +16,7 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.2.0+2
 
 environment:
   sdk: ^3.6.1
@@ -40,6 +40,7 @@ dependencies:
   path_provider: ^2.1.5
   image_picker: ^1.1.2
   flutter_tts: ^4.2.1
+  flutter_launcher_icons: ^0.14.3
 
 dev_dependencies:
   flutter_test:
@@ -54,11 +55,14 @@ dev_dependencies:
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
-
+flutter_icons:
+  android: true
+  image_path: "assets/logo.png"
 # The following section is specific to Flutter packages.
 flutter:
   assets:
     - assets/model.tflite
+    - assets/logo.png
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
