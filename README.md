@@ -29,7 +29,6 @@ To run this project locally, follow these steps:
 1. **Clone the Repository**:
    ```bash
    git clone [https://github.com/satyam-sm/currency_detection.git]
-   cd WalletVision
    ```
 
 2. **Install Dependencies**:
