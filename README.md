@@ -49,7 +49,7 @@ To run this project locally, follow these steps:
 
 - **Dataset**: 1,000 images of Indian currency notes.
 - **Model**: Convolutional Neural Network (CNN).
-- **Accuracy**: 99.59% on the validation set.
+- **Accuracy**: 98.3% on the validation set.
 - **Optimization**: Converted to TFLite for mobile deployment.
 
 ## Contributing
