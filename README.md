@@ -1,4 +1,4 @@
-# WalletVision
+# CashScan
 
 WalletVision is an Android application designed to assist visually impaired individuals in identifying Indian currency notes. The app leverages deep learning and computer vision to provide real-time currency detection using the device's camera.
 
